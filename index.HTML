@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT 評論抽獎神器 PRO | YouTube Comment Picker (API 版)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        yt: {
+                            red: '#FF0000',
+                            darkRed: '#CC0000',
+                            darkBg: '#0b0b0f',
+                            cardBg: '#18181f',
+                            cardHover: '#23232e',
+                            border: '#2e2e3d'
+                        }
+                    },
+                    animation: {
+                        'spin-slow': 'spin 12s linear infinite',
+                        'bounce-short': 'bounce 0.8s ease-in-out 2'
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f0f14;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #333345;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #4f4f66;
+        }
+
+        .wheel-pointer {
+            width: 0; 
+            height: 0; 
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 32px solid #ef4444;
+            filter: drop-shadow(0px 6px 8px rgba(0,0,0,0.7));
+        }
+
+        .slot-container {
+            mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+        }
+
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100%) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            z-index: 9999;
+            pointer-events: none;
+            animation: confetti-fall 3.5s linear forwards;
+        }
+    </style>
+</head>
+<body class="bg-yt-darkBg text-gray-100 min-h-screen flex flex-col custom-scrollbar selection:bg-red-500 selection:text-white">
+
+    <header class="border-b border-yt-border bg-yt-cardBg/90 backdrop-blur-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-tr from-red-700 to-red-500 rounded-xl flex items-center justify-center text-white text-xl shadow-lg shadow-red-600/30">
+                    <i class="fa-brands font-bold fa-youtube"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                        YT 評論抽獎神器
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-gradient-to-r from-red-500 to-amber-500 text-black uppercase tracking-wider">API 專用版</span>
+                    </h1>
+                    <p class="text-[11px] text-gray-400 hidden sm:block">YouTube Data API 直連全量抓取 · SHA-256 公信力證明</p>
+                </div>
+            </div>
+
+            <!-- Top Action Tools -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <button onclick="openBlacklistModal()" class="px-3 py-1.5 text-xs sm:text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl border border-gray-700 transition flex items-center gap-1.5" title="設定排除名單">
+                    <i class="fa-solid fa-user-slash text-red-400"></i>
+                    <span class="hidden sm:inline">黑名單</span>
+                </button>
+                <button onclick="openHistoryModal()" class="px-3 py-1.5 text-xs sm:text-sm font-semibold bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl border border-gray-700 transition flex items-center gap-1.5" title="檢視抽獎歷史紀錄">
+                    <i class="fa-solid fa-clock-rotate-left text-blue-400"></i>
+                    <span class="hidden sm:inline">歷史紀錄</span>
+                </button>
+                <button onclick="openGuideModal()" class="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition flex items-center gap-1.5 text-xs sm:text-sm font-semibold" title="使用與 API 教學">
+                    <i class="fa-solid fa-graduation-cap text-amber-400 text-base"></i>
+                    <span class="hidden sm:inline">API 教學</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Data Input & Drawing Rules (5 Columns) -->
+        <section class="lg:col-span-5 space-y-6">
+
+            <!-- Card 1: API Data Source Import Section -->
+            <div class="bg-yt-cardBg border border-yt-border rounded-2xl p-5 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-yt-border pb-3">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-brands fa-youtube text-red-500 text-base"></i>
+                        第一步：YouTube API 留言抓取
+                    </h2>
+                    <span id="dataStatusBadge" class="text-[11px] px-2.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700 font-medium">等待輸入</span>
+                </div>
+
+                <!-- API Input Form -->
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">YouTube 影片網址或 Video ID</label>
+                        <div class="relative">
+                            <input type="text" id="ytUrlInput" placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-yt-darkBg border border-yt-border rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition">
+                            <i class="fa-solid fa-link absolute left-3 top-2.5 text-gray-500 text-xs"></i>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-xs font-medium text-gray-300">YouTube Data API v3 Key</label>
+                            <button type="button" onclick="openGuideModal()" class="text-[11px] text-amber-400 hover:underline flex items-center gap-1 font-semibold">
+                                <i class="fa-solid fa-circle-question"></i> 如何獲取 API Key？
+                            </button>
+                        </div>
+                        <div class="relative">
+                            <input type="password" id="ytApiKeyInput" placeholder="AIzaSy..." class="w-full bg-yt-darkBg border border-yt-border rounded-xl pl-9 pr-10 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition font-mono">
+                            <i class="fa-solid fa-key absolute left-3 top-2.5 text-gray-500 text-xs"></i>
+                            <button type="button" onclick="toggleApiKeyVisibility()" class="absolute right-3 top-2 text-gray-500 hover:text-white text-xs">
+                                <i id="apiKeyEyeIcon" class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between mt-1.5">
+                            <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-400 hover:text-gray-200">
+                                <input type="checkbox" id="chkRememberKey" checked class="w-3.5 h-3.5 accent-red-600 rounded">
+                                記住 API Key (存於瀏覽器)
+                            </label>
+                            <span class="text-[10px] text-gray-500">僅存於本機，安全可靠</span>
+                        </div>
+                    </div>
+
+                    <!-- Fetch Progress Indicator -->
+                    <div id="apiProgressContainer" class="hidden space-y-1.5 pt-1">
+                        <div class="flex justify-between text-[11px]">
+                            <span id="apiProgressStatus" class="text-amber-400 font-medium">連線抓取中...</span>
+                            <span id="apiProgressCount" class="font-bold text-red-400">0 筆留言</span>
+                        </div>
+                        <div class="w-full bg-yt-darkBg rounded-full h-2 overflow-hidden border border-yt-border">
+                            <div id="apiProgressBar" class="bg-gradient-to-r from-red-600 to-amber-500 h-2 rounded-full transition-all duration-300" style="width: 5%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Fetch Action Buttons -->
+                    <div class="flex gap-2 pt-1">
+                        <button id="btnFetchComments" class="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-xs rounded-xl shadow-lg shadow-red-600/20 transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-cloud-arrow-down"></i>
+                            <span>開始全量抓取留言</span>
+                        </button>
+                        <button id="btnCancelFetch" class="hidden py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium rounded-xl border border-gray-700 transition">
+                            停止
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Filter & Qualification Rules -->
+            <div class="bg-yt-cardBg border border-yt-border rounded-2xl p-5 shadow-xl space-y-4">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2 border-b border-yt-border pb-3">
+                    <i class="fa-solid fa-filter text-amber-500"></i>
+                    第二步：抽獎資格與過濾設定
+                </h2>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- Keyword Filter -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">必須包含關鍵字 (選填)</label>
+                        <div class="relative">
+                            <input type="text" id="keywordInput" placeholder="例如: 抽起來, 想要獎品" class="w-full bg-yt-darkBg border border-yt-border rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500">
+                            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-amber-500 text-xs"></i>
+                        </div>
+                    </div>
+
+                    <!-- Exclude Keywords Filter -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">排除關鍵字 (選填)</label>
+                        <div class="relative">
+                            <input type="text" id="excludeInput" placeholder="例如: 詐騙, 機器人" class="w-full bg-yt-darkBg border border-yt-border rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-red-500">
+                            <i class="fa-solid fa-ban absolute left-2.5 top-2 text-red-500 text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Additional Switches -->
+                <div class="space-y-2 pt-1">
+                    <label class="flex items-center justify-between cursor-pointer p-2 rounded-xl hover:bg-yt-darkBg/60 transition border border-transparent hover:border-yt-border">
+                        <span class="text-xs text-gray-300 flex items-center gap-2">
+                            <i class="fa-solid fa-user-check text-blue-400"></i>
+                            過濾重複留言 (1 個帳號僅限一次抽獎資格)
+                        </span>
+                        <input type="checkbox" id="chkDeduplicate" checked class="w-4 h-4 accent-red-600 rounded">
+                    </label>
+
+                    <label class="flex items-center justify-between cursor-pointer p-2 rounded-xl hover:bg-yt-darkBg/60 transition border border-transparent hover:border-yt-border">
+                        <span class="text-xs text-gray-300 flex items-center gap-2">
+                            <i class="fa-solid fa-user-slash text-red-400"></i>
+                            啟用黑名單自動排除
+                        </span>
+                        <input type="checkbox" id="chkEnableBlacklist" checked class="w-4 h-4 accent-red-600 rounded">
+                    </label>
+
+                    <label class="flex items-center justify-between cursor-pointer p-2 rounded-xl hover:bg-yt-darkBg/60 transition border border-transparent hover:border-yt-border">
+                        <span class="text-xs text-gray-300 flex items-center gap-2">
+                            <i class="fa-solid fa-volume-high text-purple-400"></i>
+                            開啟抽獎音效
+                        </span>
+                        <input type="checkbox" id="chkSound" checked class="w-4 h-4 accent-red-600 rounded">
+                    </label>
+                </div>
+
+                <!-- Prize & Winners Allocation Setup -->
+                <div class="pt-3 border-t border-yt-border space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-white flex items-center gap-1.5">
+                            <i class="fa-solid fa-trophy text-yellow-400"></i>
+                            抽取名額與動畫
+                        </label>
+                        <select id="drawAnimMode" class="bg-yt-darkBg text-xs text-amber-400 border border-yt-border rounded-lg px-2 py-1 focus:outline-none font-medium">
+                            <option value="wheel">🎪 幸運大輪盤</option>
+                            <option value="slot">🎰 老虎機滾輪</option>
+                            <option value="instant">⚡ 即時快速開獎</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[11px] font-medium text-gray-400 mb-1">正取人數</label>
+                            <input type="number" id="winnerCountInput" value="1" min="1" max="100" class="w-full bg-yt-darkBg border border-yt-border rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-red-500 font-bold text-center">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-medium text-gray-400 mb-1">備取人數</label>
+                            <input type="number" id="backupCountInput" value="2" min="0" max="100" class="w-full bg-yt-darkBg border border-yt-border rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-red-500 font-bold text-center">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 3: Realtime Statistics Dashboard -->
+            <div class="bg-yt-cardBg border border-yt-border rounded-2xl p-4 shadow-xl grid grid-cols-2 gap-3 text-center">
+                <div class="p-3 rounded-xl bg-yt-darkBg/80 border border-yt-border/50">
+                    <p class="text-[11px] text-gray-400">抓取留言總數</p>
+                    <p id="statTotal" class="text-lg sm:text-xl font-black text-white mt-0.5">0</p>
+                </div>
+                <div class="p-3 rounded-xl bg-yt-darkBg/80 border border-yt-border/50">
+                    <p class="text-[11px] text-amber-400">符合資格人數 (抽獎池)</p>
+                    <p id="statEligible" class="text-lg sm:text-xl font-black text-amber-400 mt-0.5">0</p>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Column: Interactive Draw Canvas & Lists (7 Columns) -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+
+            <div class="flex flex-wrap items-center justify-between border-b border-yt-border pb-3 gap-2">
+                <div class="flex gap-1.5">
+                    <button id="navTabList" onclick="switchMainTab('list')" class="px-3 py-1.5 text-xs sm:text-sm font-bold rounded-xl bg-yt-cardBg border border-yt-border text-white shadow flex items-center gap-1.5">
+                        <i class="fa-solid fa-list-ul text-red-500"></i>
+                        <span>留言清單</span>
+                    </button>
+                    <button id="navTabStage" onclick="switchMainTab('stage')" class="px-3 py-1.5 text-xs sm:text-sm font-bold rounded-xl bg-transparent border border-transparent text-gray-400 hover:text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-dice text-amber-500"></i>
+                        <span>抽獎舞台</span>
+                    </button>
+                    <button id="navTabWinners" onclick="switchMainTab('winners')" class="px-3 py-1.5 text-xs sm:text-sm font-bold rounded-xl bg-transparent border border-transparent text-gray-400 hover:text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-trophy text-yellow-400"></i>
+                        <span>中獎名單</span>
+                        <span id="badgeWinnerCount" class="hidden px-2 py-0.5 text-[10px] rounded-full bg-yellow-500 text-black font-extrabold">0</span>
+                    </button>
+                </div>
+
+                <!-- Main Draw Trigger Button -->
+                <button id="btnStartDraw" class="px-5 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-yellow-400 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-lg shadow-red-600/30 transition transform active:scale-95 flex items-center gap-2">
+                    <i class="fa-solid fa-play text-sm"></i>
+                    <span>開始抽獎！</span>
+                </button>
+            </div>
+
+            <!-- View 1: Comment List -->
+            <div id="viewList" class="bg-yt-cardBg border border-yt-border rounded-2xl p-5 shadow-xl flex-1 flex flex-col min-h-[500px]">
+                <div class="flex items-center justify-between mb-4 gap-2">
+                    <h3 class="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+                        <span>符合資格留言</span>
+                        <span id="filteredCountTag" class="text-xs bg-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full border border-red-500/30 font-medium">0 人</span>
+                    </h3>
+                    <div class="relative w-40 sm:w-56">
+                        <input type="text" id="searchInList" oninput="renderCommentList()" placeholder="搜尋作者或留言..." class="w-full bg-yt-darkBg border border-yt-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-red-500">
+                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-gray-500 text-xs"></i>
+                    </div>
+                </div>
+
+                <!-- Comment Pool List Container -->
+                <div id="commentListContainer" class="flex-1 overflow-y-auto space-y-2.5 pr-2 custom-scrollbar max-h-[520px]">
+                    <div class="h-full flex flex-col items-center justify-center text-center p-8 text-gray-500 space-y-3">
+                        <div class="w-16 h-16 rounded-2xl bg-yt-darkBg flex items-center justify-center text-2xl border border-yt-border text-gray-600">
+                            <i class="fa-brands fa-youtube"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-300">尚未抓取任何留言</p>
+                            <p class="text-xs text-gray-500 mt-1">請在左側輸入 YouTube 影片網址與 API Key 後點擊「開始全量抓取留言」</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View 2: Interactive Stage -->
+            <div id="viewStage" class="bg-yt-cardBg border border-yt-border rounded-2xl p-5 shadow-xl flex-1 flex flex-col items-center justify-center min-h-[500px] hidden relative overflow-hidden">
+                
+                <!-- Wheel Stage Display -->
+                <div id="stageWheelView" class="flex flex-col items-center justify-center space-y-4 w-full">
+                    <div class="text-center">
+                        <h3 class="text-base font-extrabold text-white flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-dharmachakra text-amber-500 animate-spin-slow"></i>
+                            幸運大輪盤
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-1">隨機轉動輪盤，選出最幸運的影片粉絲！</p>
+                    </div>
+
+                    <div class="relative my-2 flex items-center justify-center">
+                        <div class="wheel-pointer absolute -top-4 z-20"></div>
+                        <canvas id="wheelCanvas" width="360" height="360" class="rounded-full shadow-2xl border-4 border-gray-800 transition-transform"></canvas>
+                        <div class="absolute w-16 h-16 bg-gradient-to-tr from-gray-900 to-gray-800 border-4 border-amber-500 rounded-full flex items-center justify-center shadow-2xl z-10 text-amber-400 font-black text-xs">
+                            GO!
+                        </div>
+                    </div>
+
+                    <button id="btnSpinWheel" class="px-8 py-2.5 bg-gradient-to-r from-amber-500 via-red-600 to-amber-500 hover:from-amber-400 hover:to-red-500 text-black font-black text-sm rounded-full shadow-lg shadow-amber-500/20 transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fa-solid fa-play"></i>
+                        <span>旋轉輪盤</span>
+                    </button>
+                </div>
+
+                <!-- Slot Machine Stage Display -->
+                <div id="stageSlotView" class="hidden flex flex-col items-center justify-center space-y-6 w-full py-8">
+                    <div class="text-center">
+                        <h3 class="text-lg font-extrabold text-white flex items-center justify-center gap-2">
+                            🎰 幸運老虎機滾輪
+                        </h3>
+                        <p class="text-xs text-gray-400 mt-1">高速滾動！隨機停留在幸運得主留言！</p>
+                    </div>
+
+                    <div class="w-full max-w-md h-36 bg-yt-darkBg border-4 border-amber-500/60 rounded-2xl shadow-2xl relative overflow-hidden slot-container flex items-center justify-center">
+                        <div id="slotReelContainer" class="w-full text-center space-y-4 py-8">
+                            <div class="text-gray-500 font-bold text-base">準備開獎...</div>
+                        </div>
+                    </div>
+
+                    <button id="btnRollSlot" class="px-8 py-2.5 bg-gradient-to-r from-yellow-500 via-amber-500 to-red-600 hover:from-yellow-400 hover:to-red-500 text-black font-black text-sm rounded-full shadow-lg transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fa-solid fa-dice"></i>
+                        <span>啟動滾輪</span>
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- View 3: Winners Result -->
+            <div id="viewWinners" class="bg-yt-cardBg border border-yt-border rounded-2xl p-5 shadow-xl flex-1 flex flex-col min-h-[500px] hidden">
+                <div class="flex flex-wrap items-center justify-between mb-4 border-b border-yt-border pb-3 gap-2">
+                    <div>
+                        <h3 class="font-bold text-white text-base flex items-center gap-2">
+                            <i class="fa-solid fa-crown text-yellow-400"></i>
+                            抽獎結果名單
+                        </h3>
+                        <p class="text-xs text-gray-400">已自動生成不可竄改之 SHA-256 公信力憑證</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="copyWinnersText()" class="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-copy text-blue-400"></i>
+                            複製文字
+                        </button>
+                        <button onclick="exportWinnersCSV()" class="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-csv"></i>
+                            匯出 CSV
+                        </button>
+                        <button onclick="openCertificateModal()" class="px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-lg transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-certificate"></i>
+                            生成驗證憑證
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Winners Container -->
+                <div id="winnersContainer" class="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2 max-h-[480px]">
+                    <div class="h-full flex flex-col items-center justify-center text-center p-8 text-gray-500">
+                        <i class="fa-solid fa-trophy text-4xl mb-3 text-gray-600"></i>
+                        <p class="text-sm font-medium text-gray-300">尚未抽出得主</p>
+                        <p class="text-xs text-gray-500 mt-1">點擊右上角「開始抽獎」開啟活動！</p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    
+    <!-- Winner Celebration Modal -->
+    <div id="winnerModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-opacity duration-300">
+        <div class="bg-yt-cardBg border-2 border-yellow-500/60 rounded-3xl max-w-lg w-full p-6 sm:p-8 text-center relative shadow-2xl transform scale-95 transition-transform duration-300">
+            <div class="w-20 h-20 bg-gradient-to-tr from-yellow-500 to-amber-300 rounded-full flex items-center justify-center text-4xl text-black shadow-lg shadow-yellow-500/40 mx-auto -mt-14 mb-4 border-4 border-yt-cardBg animate-bounce">
+                👑
+            </div>
+
+            <h3 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 mb-1">
+                恭喜幸運得主！
+            </h3>
+            <p id="winnerModalCategory" class="text-xs text-amber-400 uppercase tracking-widest font-semibold mb-6">正取得獎者</p>
+
+            <div class="bg-yt-darkBg/90 border border-yt-border rounded-2xl p-5 text-left space-y-3 mb-6 relative overflow-hidden">
+                <div class="flex items-center gap-3">
+                    <img id="winnerModalAvatar" src="https://placehold.co/100x100/333/fff?text=YT" class="w-12 h-12 rounded-full border-2 border-amber-500 object-cover">
+                    <div class="flex-1 min-w-0">
+                        <h4 id="winnerModalName" class="font-bold text-white text-base truncate">User Name</h4>
+                        <p id="winnerModalTime" class="text-[11px] text-gray-500">2026-09-19</p>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-yt-border">
+                    <p id="winnerModalComment" class="text-xs sm:text-sm text-gray-200 bg-yt-cardBg p-3 rounded-xl border border-yt-border italic break-words">
+                        "留言內容"
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="redrawSingleWinner()" class="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold text-xs sm:text-sm rounded-xl border border-gray-700 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>重抽此名額</span>
+                </button>
+                <button onclick="closeWinnerModal()" class="flex-1 py-2.5 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-extrabold text-xs sm:text-sm rounded-xl shadow-lg transition">
+                    確定並檢視名單
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Blacklist Manager Modal -->
+    <div id="blacklistModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-yt-cardBg border border-yt-border rounded-2xl max-w-md w-full p-6 text-left space-y-4">
+            <div class="flex justify-between items-center border-b border-yt-border pb-3">
+                <h3 class="font-bold text-white text-base flex items-center gap-2">
+                    <i class="fa-solid fa-user-slash text-red-500"></i>
+                    黑名單 / 禁抽帳號設定
+                </h3>
+                <button onclick="closeBlacklistModal()" class="text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <p class="text-xs text-gray-400">請輸入欲排除的使用者名稱（每行一個），符合名稱者將自動排除於抽獎池外：</p>
+            <textarea id="blacklistTextArea" rows="6" placeholder="例如：&#10;惡意洗版帳號A&#10;Bot_123&#10;無效小號" class="w-full bg-yt-darkBg border border-yt-border rounded-xl p-3 text-xs text-white focus:outline-none focus:border-red-500 transition font-mono custom-scrollbar"></textarea>
+            <button onclick="saveBlacklist()" class="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl transition">
+                儲存黑名單
+            </button>
+        </div>
+    </div>
+
+    <!-- History Drawer Modal -->
+    <div id="historyModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-yt-cardBg border border-yt-border rounded-2xl max-w-lg w-full p-6 text-left space-y-4 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center border-b border-yt-border pb-3">
+                <h3 class="font-bold text-white text-base flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-blue-400"></i>
+                    抽獎歷史紀錄 (LocalStorage)
+                </h3>
+                <button onclick="closeHistoryModal()" class="text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div id="historyListContainer" class="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-2 max-h-[400px]">
+                <!-- History Items generated via JS -->
+            </div>
+            <div class="flex gap-2 border-t border-yt-border pt-3">
+                <button onclick="clearHistory()" class="px-4 py-2 bg-gray-800 hover:bg-red-900/40 text-red-400 border border-gray-700 text-xs font-semibold rounded-xl transition">
+                    清除所有歷史
+                </button>
+                <button onclick="closeHistoryModal()" class="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold rounded-xl transition">
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hash Certificate Proof Modal -->
+    <div id="certModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-yt-cardBg border-2 border-amber-500/50 rounded-3xl max-w-lg w-full p-6 sm:p-8 text-left space-y-4 shadow-2xl relative">
+            <div class="text-center">
+                <div class="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center text-2xl mx-auto mb-2">
+                    🛡️
+                </div>
+                <h3 class="text-lg font-black text-white">抽獎公信力驗證憑證</h3>
+                <p class="text-xs text-gray-400 mt-0.5">證明本結果經隨機演算法產出，無人工竄改</p>
+            </div>
+
+            <div class="bg-yt-darkBg border border-yt-border rounded-xl p-4 space-y-2 text-xs">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">驗證時間：</span>
+                    <span id="certTime" class="text-white font-mono">2026-09-19</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">留言總數 / 資格數：</span>
+                    <span id="certStats" class="text-amber-400 font-mono">1,200 / 1,050</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">得獎人數：</span>
+                    <span id="certWinnersCount" class="text-emerald-400 font-mono">3 人</span>
+                </div>
+                <div class="pt-2 border-t border-yt-border">
+                    <span class="text-gray-400 block mb-1">SHA-256 驗證壓印碼 (Proof Hash)：</span>
+                    <input type="text" id="certHashInput" readonly class="w-full bg-black/60 border border-yt-border rounded p-2 text-[10px] font-mono text-emerald-400 focus:outline-none select-all">
+                </div>
+            </div>
+
+            <button onclick="copyCertText()" class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-extrabold text-xs rounded-xl shadow transition">
+                複製公信力憑證文字
+            </button>
+            <button onclick="closeCertModal()" class="w-full py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium text-xs rounded-xl transition">
+                關閉
+            </button>
+        </div>
+    </div>
+
+    <!-- Enhanced Guide & API Key Tutorial Modal -->
+    <div id="guideModal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-yt-cardBg border border-yt-border rounded-3xl max-w-xl w-full p-6 sm:p-8 text-left space-y-5 max-h-[90vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center border-b border-yt-border pb-4">
+                <h3 class="font-bold text-white text-base sm:text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap text-amber-400 text-xl"></i>
+                    YouTube Data API 申請與使用完整教學
+                </h3>
+                <button onclick="closeGuideModal()" class="text-gray-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto space-y-4 text-xs sm:text-sm text-gray-300 pr-2 custom-scrollbar leading-relaxed">
+                <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200">
+                    <p class="font-bold flex items-center gap-1.5 mb-1">
+                        <i class="fa-solid fa-lightbulb"></i> 為什麼需要 YouTube API Key？
+                    </p>
+                    <p class="text-xs text-amber-300/90">
+                        YouTube 官方對留言抓取有嚴格限制。透過您專屬的免費 API Key，本工具能直接串接官方 API，一鍵抓取破萬則留言且完全不會遺漏！
+                    </p>
+                </div>
+
+                <div class="space-y-3">
+                    <h4 class="font-extrabold text-white text-xs sm:text-sm uppercase tracking-wider text-red-400 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ol"></i> 4 個步驟輕鬆取得免費 API 金鑰：
+                    </h4>
+
+                    <div class="space-y-2.5">
+                        <div class="p-3 bg-yt-darkBg border border-yt-border rounded-xl space-y-1">
+                            <span class="font-bold text-white text-xs px-2 py-0.5 bg-red-600/30 text-red-400 rounded">步驟 1</span>
+                            <p class="text-xs text-gray-300 mt-1">
+                                前往 <a href="https://console.cloud.google.com/" target="_blank" class="text-red-400 underline font-semibold">Google Cloud Console <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a> 並登入您的 Google 帳號。
+                            </p>
+                        </div>
+
+                        <div class="p-3 bg-yt-darkBg border border-yt-border rounded-xl space-y-1">
+                            <span class="font-bold text-white text-xs px-2 py-0.5 bg-red-600/30 text-red-400 rounded">步驟 2</span>
+                            <p class="text-xs text-gray-300 mt-1">
+                                點擊頂部導覽列建立一個新專案（例如命名為 <code>YT-Picker</code>）。
+                            </p>
+                        </div>
+
+                        <div class="p-3 bg-yt-darkBg border border-yt-border rounded-xl space-y-1">
+                            <span class="font-bold text-white text-xs px-2 py-0.5 bg-red-600/30 text-red-400 rounded">步驟 3</span>
+                            <p class="text-xs text-gray-300 mt-1">
+                                在上方搜尋列搜尋 <strong>"YouTube Data API v3"</strong>，點進去並點擊藍色的 <strong>「啟用」</strong> 按鈕。
+                            </p>
+                        </div>
+
+                        <div class="p-3 bg-yt-darkBg border border-yt-border rounded-xl space-y-1">
+                            <span class="font-bold text-white text-xs px-2 py-0.5 bg-red-600/30 text-red-400 rounded">步驟 4</span>
+                            <p class="text-xs text-gray-300 mt-1">
+                                切換到左側選單的 <strong>「憑證 (Credentials)」</strong>，點擊上方的 <strong>「建立憑證」</strong> ➔ 選擇 <strong>「API 金鑰 (API Key)」</strong>，即可複製您的專屬金鑰！
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-2xl bg-yt-darkBg border border-yt-border space-y-2">
+                    <p class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-emerald-400"></i> 安全與額度提示：
+                    </p>
+                    <ul class="list-disc list-inside text-[11px] text-gray-400 space-y-1">
+                        <li>您的 API Key 僅會儲存在您自己的瀏覽器 LocalStorage 中，絕不會上傳至任何第三方伺服器。</li>
+                        <li>YouTube Data API v3 提供免費額度（每日約 10,000 單位），足以應付數十萬則留言抓取。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button onclick="closeGuideModal()" class="w-full py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-xs rounded-xl shadow transition">
+                我了解了，立即開始
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let rawComments = [];       // Master unfiltered comment array
+        let filteredPool = [];      // Qualified candidates after active filters
+        let winnersList = [];       // Final drawn winners list
+        let blacklist = [];         // Excluded user names array
+        let isSpinning = false;
+        let isCancelRequested = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('keywordInput').addEventListener('input', applyFilters);
+            document.getElementById('excludeInput').addEventListener('input', applyFilters);
+            document.getElementById('chkDeduplicate').addEventListener('change', applyFilters);
+            document.getElementById('chkEnableBlacklist').addEventListener('change', applyFilters);
+            document.getElementById('btnStartDraw').addEventListener('click', executeDraw);
+            document.getElementById('btnSpinWheel').addEventListener('click', spinWheelAnimation);
+            document.getElementById('btnRollSlot').addEventListener('click', spinSlotAnimation);
+            document.getElementById('btnFetchComments').addEventListener('click', handleFetchYtCommentsAutoPage);
+            document.getElementById('btnCancelFetch').addEventListener('click', () => { isCancelRequested = true; });
+            document.getElementById('drawAnimMode').addEventListener('change', updateStageViewMode);
+
+            loadStoredApiKey();
+            initWheelCanvas();
+            loadBlacklistFromStorage();
+        });
+
+        function loadStoredApiKey() {
+            const savedKey = localStorage.getItem('yt_api_key');
+            if (savedKey) {
+                document.getElementById('ytApiKeyInput').value = savedKey;
+            }
+        }
+
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('ytApiKeyInput');
+            const icon = document.getElementById('apiKeyEyeIcon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fa-solid fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fa-solid fa-eye';
+            }
+        }
+
+        function openGuideModal() {
+            document.getElementById('guideModal').classList.remove('hidden');
+        }
+
+        function closeGuideModal() {
+            document.getElementById('guideModal').classList.add('hidden');
+        }
+
+        async function handleFetchYtCommentsAutoPage() {
+            const urlInput = document.getElementById('ytUrlInput').value.trim();
+            const apiKey = document.getElementById('ytApiKeyInput').value.trim();
+            const rememberKey = document.getElementById('chkRememberKey').checked;
+
+            if (!urlInput) {
+                alert('請輸入 YouTube 影片網址或 Video ID！');
+                return;
+            }
+
+            let videoId = urlInput;
+            const match = urlInput.match(/(?:v=|\/embed\/|\/1\/|\/v\/|https:\/\/youtu\.be\/|\/shorts\/)([^"&?\/\s]{11})/);
+            if (match && match[1]) videoId = match[1];
+
+            if (!apiKey) {
+                alert('請填寫 YouTube Data API Key！');
+                return;
+            }
+
+            if (rememberKey) {
+                localStorage.setItem('yt_api_key', apiKey);
+            } else {
+                localStorage.removeItem('yt_api_key');
+            }
+
+            isCancelRequested = false;
+            rawComments = [];
+            let pageToken = '';
+            let pageCount = 0;
+
+            const btnFetch = document.getElementById('btnFetchComments');
+            const btnCancel = document.getElementById('btnCancelFetch');
+            const progressContainer = document.getElementById('apiProgressContainer');
+            const progressStatus = document.getElementById('apiProgressStatus');
+            const progressCount = document.getElementById('apiProgressCount');
+            const progressBar = document.getElementById('apiProgressBar');
+
+            btnFetch.disabled = true;
+            btnFetch.classList.add('opacity-50');
+            btnCancel.classList.remove('hidden');
+            progressContainer.classList.remove('hidden');
+
+            try {
+                do {
+                    if (isCancelRequested) {
+                        progressStatus.innerText = '使用者已取消抓取';
+                        break;
+                    }
+
+                    pageCount++;
+                    progressStatus.innerText = `連線抓取中 (第 ${pageCount} 頁)...`;
+
+                    let apiUrl = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=100&key=${apiKey}`;
+                    if (pageToken) apiUrl += `&pageToken=${pageToken}`;
+
+                    const res = await fetch(apiUrl);
+                    const data = await res.json();
+
+                    if (data.error) {
+                        throw new Error(data.error.message || 'API 請求失敗');
+                    }
+
+                    if (!data.items || data.items.length === 0) {
+                        if (rawComments.length === 0) {
+                            alert('該影片沒有找到任何公開留言！');
+                        }
+                        break;
+                    }
+
+                    const fetchedItems = data.items.map(item => {
+                        const snippet = item.snippet.topLevelComment.snippet;
+                        return {
+                            id: item.id,
+                            authorName: snippet.authorDisplayName || '匿名使用者',
+                            authorAvatar: snippet.authorProfileImageUrl || 'https://placehold.co/100x100/333/fff?text=YT',
+                            commentText: snippet.textDisplay || '',
+                            publishedAt: new Date(snippet.publishedAt).toLocaleString()
+                        };
+                    });
+
+                    rawComments.push(...fetchedItems);
+                    progressCount.innerText = `${rawComments.length.toLocaleString()} 筆`;
+                    progressBar.style.width = Math.min((pageCount * 10), 100) + '%';
+
+                    pageToken = data.nextPageToken || '';
+                    applyFilters();
+
+                    await new Promise(r => setTimeout(r, 120));
+
+                } while (pageToken && !isCancelRequested);
+
+                if (!isCancelRequested) {
+                    updateStatusBadge(`成功抓取 ${rawComments.length.toLocaleString()} 則留言`);
+                    progressStatus.innerText = '抓取完成！';
+                    progressBar.style.width = '100%';
+                }
+
+            } catch (err) {
+                alert('抓取失敗：' + err.message);
+                updateStatusBadge('抓取失敗');
+            } finally {
+                btnFetch.disabled = false;
+                btnFetch.classList.remove('opacity-50');
+                btnCancel.classList.add('hidden');
+            }
+        }
+
+        function updateStatusBadge(text) {
+            const badge = document.getElementById('dataStatusBadge');
+            badge.innerText = text;
+            badge.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold';
+        }
+
+        function applyFilters() {
+            const keyword = document.getElementById('keywordInput').value.trim().toLowerCase();
+            const excludeWord = document.getElementById('excludeInput').value.trim().toLowerCase();
+            const deduplicate = document.getElementById('chkDeduplicate').checked;
+            const enableBlacklist = document.getElementById('chkEnableBlacklist').checked;
+
+            let pool = [...rawComments];
+
+            if (keyword) {
+                pool = pool.filter(c => c.commentText.toLowerCase().includes(keyword));
+            }
+
+            if (excludeWord) {
+                pool = pool.filter(c => !c.commentText.toLowerCase().includes(excludeWord));
+            }
+
+            if (enableBlacklist && blacklist.length > 0) {
+                const blackSet = new Set(blacklist.map(b => b.toLowerCase().trim()));
+                pool = pool.filter(c => !blackSet.has(c.authorName.toLowerCase().trim()));
+            }
+
+            if (deduplicate) {
+                const seen = new Set();
+                pool = pool.filter(c => {
+                    const key = c.authorName.toLowerCase().trim();
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+            }
+
+            filteredPool = pool;
+
+            document.getElementById('statTotal').innerText = rawComments.length.toLocaleString();
+            document.getElementById('statEligible').innerText = filteredPool.length.toLocaleString();
+            document.getElementById('filteredCountTag').innerText = `${filteredPool.length.toLocaleString()} 人`;
+
+            renderCommentList();
+            drawWheel();
+        }
+
+        function renderCommentList() {
+            const container = document.getElementById('commentListContainer');
+            const searchQuery = document.getElementById('searchInList').value.trim().toLowerCase();
+            const keyword = document.getElementById('keywordInput').value.trim();
+
+            let displayList = filteredPool;
+            if (searchQuery) {
+                displayList = displayList.filter(c => 
+                    c.authorName.toLowerCase().includes(searchQuery) || 
+                    c.commentText.toLowerCase().includes(searchQuery)
+                );
+            }
+
+            if (displayList.length === 0) {
+                container.innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center text-center p-8 text-gray-500 space-y-2">
+                        <i class="fa-solid fa-filter-circle-xmark text-3xl text-gray-600"></i>
+                        <p class="text-xs font-medium text-gray-400">沒有符合篩選條件的留言</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const limitList = displayList.slice(0, 100);
+
+            container.innerHTML = limitList.map(c => {
+                let highlightedText = escapeHtml(c.commentText);
+                if (keyword) {
+                    const reg = new RegExp(`(${escapeRegExp(keyword)})`, 'gi');
+                    highlightedText = highlightedText.replace(reg, '<mark class="bg-amber-500/40 text-amber-200 px-1 rounded">$1</mark>');
+                }
+
+                return `
+                    <div class="p-3 bg-yt-darkBg/90 border border-yt-border rounded-xl hover:border-gray-600 transition flex items-start gap-3">
+                        <img src="${c.authorAvatar}" class="w-8 h-8 rounded-full object-cover border border-yt-border flex-shrink-0" onerror="this.src='https://placehold.co/100x100/333/fff?text=YT'">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2 mb-0.5">
+                                <span class="font-bold text-xs text-white truncate">${escapeHtml(c.authorName)}</span>
+                                <span class="text-[10px] text-gray-500">${c.publishedAt}</span>
+                            </div>
+                            <p class="text-xs text-gray-300 leading-relaxed break-words">${highlightedText}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('') + (displayList.length > 100 ? `<div class="text-center text-xs text-gray-500 py-2">僅預覽前 100 筆，其餘 ${displayList.length - 100} 筆已自動併入抽獎池</div>` : '');
+        }
+
+        function switchMainTab(tab) {
+            const views = { list: 'viewList', stage: 'viewStage', winners: 'viewWinners' };
+            const navs = { list: 'navTabList', stage: 'navTabStage', winners: 'navTabWinners' };
+
+            Object.keys(views).forEach(k => {
+                const viewEl = document.getElementById(views[k]);
+                const navEl = document.getElementById(navs[k]);
+                if (k === tab) {
+                    viewEl.classList.remove('hidden');
+                    navEl.className = 'px-3 py-1.5 text-xs sm:text-sm font-bold rounded-xl bg-yt-cardBg border border-yt-border text-white shadow flex items-center gap-1.5';
+                } else {
+                    viewEl.classList.add('hidden');
+                    navEl.className = 'px-3 py-1.5 text-xs sm:text-sm font-bold rounded-xl bg-transparent border border-transparent text-gray-400 hover:text-white flex items-center gap-1.5';
+                }
+            });
+
+            if (tab === 'stage') {
+                updateStageViewMode();
+            }
+        }
+
+        function updateStageViewMode() {
+            const mode = document.getElementById('drawAnimMode').value;
+            const wheelView = document.getElementById('stageWheelView');
+            const slotView = document.getElementById('stageSlotView');
+
+            if (mode === 'wheel') {
+                wheelView.classList.remove('hidden');
+                slotView.classList.add('hidden');
+                drawWheel();
+            } else if (mode === 'slot') {
+                wheelView.classList.add('hidden');
+                slotView.classList.remove('hidden');
+            } else {
+                wheelView.classList.remove('hidden');
+                slotView.classList.add('hidden');
+                drawWheel();
+            }
+        }
+
+        function initWheelCanvas() {
+            const canvas = document.getElementById('wheelCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#18181f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawWheel(rotationAngle = 0) {
+            const canvas = document.getElementById('wheelCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            const displaySlicePool = filteredPool.slice(0, 24);
+            const numSegments = Math.max(displaySlicePool.length, 1);
+            const radius = canvas.width / 2;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (filteredPool.length === 0) {
+                ctx.fillStyle = '#18181f';
+                ctx.beginPath();
+                ctx.arc(radius, radius, radius - 5, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#666';
+                ctx.font = '13px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText('請先抓取影片留言數據', radius, radius);
+                return;
+            }
+
+            const anglePerSegment = (2 * Math.PI) / numSegments;
+            const colors = ['#e63946', '#f1faee', '#a8ded6', '#457b9d', '#1d3557', '#ffb703', '#fb8500'];
+
+            ctx.save();
+            ctx.translate(radius, radius);
+            ctx.rotate(rotationAngle);
+
+            for (let i = 0; i < numSegments; i++) {
+                const segAngle = i * anglePerSegment;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius - 5, segAngle, segAngle + anglePerSegment);
+                ctx.closePath();
+
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.fill();
+                ctx.strokeStyle = '#0b0b0f';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.save();
+                ctx.rotate(segAngle + anglePerSegment / 2);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 11px Inter';
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 4;
+                const name = displaySlicePool[i].authorName;
+                ctx.fillText(name.length > 7 ? name.substring(0, 7) + '..' : name, radius - 15, 4);
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+
+        function spinWheelAnimation() {
+            if (isSpinning || filteredPool.length === 0) return;
+            isSpinning = true;
+
+            const winnerIndex = Math.floor(Math.random() * filteredPool.length);
+            const targetWinner = filteredPool[winnerIndex];
+
+            const numSegments = Math.min(filteredPool.length, 24);
+            const segmentAngle = (2 * Math.PI) / numSegments;
+            const targetRotation = 10 * Math.PI * 2 + Math.random() * Math.PI * 2;
+            
+            let currentAngle = 0;
+            const duration = 3500;
+            const startTime = performance.now();
+
+            function animate(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+
+                currentAngle = easeOut * targetRotation;
+                drawWheel(currentAngle);
+
+                if (Math.floor(currentAngle / segmentAngle) > Math.floor((currentAngle - 0.1) / segmentAngle)) {
+                    playSound('tick');
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    isSpinning = false;
+                    showWinnerModal(targetWinner, '正取得獎者');
+                    playSound('win');
+                    triggerConfetti();
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function spinSlotAnimation() {
+            if (isSpinning || filteredPool.length === 0) return;
+            isSpinning = true;
+
+            const slotContainer = document.getElementById('slotReelContainer');
+            const duration = 3000;
+            const startTime = performance.now();
+
+            function roll(now) {
+                const elapsed = now - startTime;
+                if (elapsed < duration) {
+                    const randomCand = filteredPool[Math.floor(Math.random() * filteredPool.length)];
+                    slotContainer.innerHTML = `
+                        <div class="flex items-center justify-center gap-3 animate-bounce">
+                            <img src="${randomCand.authorAvatar}" class="w-10 h-10 rounded-full border border-amber-500" onerror="this.src='https://placehold.co/100x100/333/fff?text=YT'">
+                            <div class="text-left">
+                                <p class="font-bold text-white text-sm">${escapeHtml(randomCand.authorName)}</p>
+                                <p class="text-xs text-amber-400 truncate max-w-xs">${escapeHtml(randomCand.commentText)}</p>
+                            </div>
+                        </div>
+                    `;
+                    playSound('tick');
+                    requestAnimationFrame(roll);
+                } else {
+                    isSpinning = false;
+                    const winner = filteredPool[Math.floor(Math.random() * filteredPool.length)];
+                    slotContainer.innerHTML = `
+                        <div class="flex items-center justify-center gap-3">
+                            <img src="${winner.authorAvatar}" class="w-12 h-12 rounded-full border-2 border-yellow-400 shadow-lg shadow-yellow-500/50" onerror="this.src='https://placehold.co/100x100/333/fff?text=YT'">
+                            <div class="text-left">
+                                <p class="font-black text-yellow-400 text-base">🎉 ${escapeHtml(winner.authorName)}</p>
+                                <p class="text-xs text-white truncate max-w-xs font-semibold">${escapeHtml(winner.commentText)}</p>
+                            </div>
+                        </div>
+                    `;
+                    showWinnerModal(winner, '正取得獎者');
+                    playSound('win');
+                    triggerConfetti();
+                }
+            }
+
+            requestAnimationFrame(roll);
+        }
+
+        function executeDraw() {
+            if (filteredPool.length === 0) {
+                alert('留言池中沒有符合資格的人選！請先輸入網址並點擊「開始全量抓取留言」。');
+                return;
+            }
+
+            const animMode = document.getElementById('drawAnimMode').value;
+            if (animMode === 'wheel') {
+                switchMainTab('stage');
+                spinWheelAnimation();
+                return;
+            } else if (animMode === 'slot') {
+                switchMainTab('stage');
+                spinSlotAnimation();
+                return;
+            }
+
+            // Instant Batch Mode
+            const mainCount = parseInt(document.getElementById('winnerCountInput').value) || 1;
+            const backupCount = parseInt(document.getElementById('backupCountInput').value) || 0;
+            const totalToDraw = mainCount + backupCount;
+
+            if (filteredPool.length < totalToDraw) {
+                if (!confirm(`符合資格人數 (${filteredPool.length}人) 少於設定抽取人數 (${totalToDraw}人)，是否全數抽出？`)) {
+                    return;
+                }
+            }
+
+            const shuffled = [...filteredPool].sort(() => Math.random() - 0.5);
+            winnersList = [];
+
+            const actualMainCount = Math.min(mainCount, shuffled.length);
+            for (let i = 0; i < actualMainCount; i++) {
+                winnersList.push({ ...shuffled[i], type: 'main', rank: i + 1 });
+            }
+
+            const remaining = shuffled.slice(actualMainCount);
+            const actualBackupCount = Math.min(backupCount, remaining.length);
+            for (let i = 0; i < actualBackupCount; i++) {
+                winnersList.push({ ...remaining[i], type: 'backup', rank: i + 1 });
+            }
+
+            renderWinnersView();
+            switchMainTab('winners');
+            playSound('win');
+            triggerConfetti();
+            saveHistoryRecord();
+
+            if (winnersList.length > 0) {
+                showWinnerModal(winnersList[0], winnersList[0].type === 'main' ? `正取第 1 位` : `備取第 1 位`);
+            }
+        }
+
+        function renderWinnersView() {
+            const container = document.getElementById('winnersContainer');
+            const badge = document.getElementById('badgeWinnerCount');
+
+            if (winnersList.length === 0) {
+                container.innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center text-center p-8 text-gray-500">
+                        <i class="fa-solid fa-trophy text-4xl mb-3 text-gray-600"></i>
+                        <p class="text-sm font-medium text-gray-300">尚未抽出得主</p>
+                    </div>
+                `;
+                badge.classList.add('hidden');
+                return;
+            }
+
+            badge.innerText = winnersList.length;
+            badge.classList.remove('hidden');
+
+            const mainWinners = winnersList.filter(w => w.type === 'main');
+            const backupWinners = winnersList.filter(w => w.type === 'backup');
+
+            container.innerHTML = `
+                <div class="space-y-3">
+                    <h4 class="text-xs font-extrabold text-yellow-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-crown"></i> 正取中獎名單 (${mainWinners.length}名)
+                    </h4>
+                    ${mainWinners.map(w => renderWinnerCard(w)).join('')}
+                </div>
+
+                ${backupWinners.length > 0 ? `
+                <div class="space-y-3 pt-4 border-t border-yt-border">
+                    <h4 class="text-xs font-extrabold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-clock"></i> 備取名單 (${backupWinners.length}名)
+                    </h4>
+                    ${backupWinners.map(w => renderWinnerCard(w)).join('')}
+                </div>
+                ` : ''}
+            `;
+        }
+
+        function renderWinnerCard(w) {
+            const isMain = w.type === 'main';
+            return `
+                <div class="p-4 bg-yt-darkBg border ${isMain ? 'border-yellow-500/40 bg-gradient-to-r from-yellow-500/5 to-transparent' : 'border-yt-border'} rounded-2xl flex items-start gap-3.5">
+                    <img src="${w.authorAvatar}" class="w-11 h-11 rounded-full object-cover border-2 ${isMain ? 'border-yellow-500' : 'border-gray-600'} flex-shrink-0" onerror="this.src='https://placehold.co/100x100/333/fff?text=YT'">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-xs sm:text-sm text-white">${escapeHtml(w.authorName)}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${isMain ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}">
+                                    ${isMain ? `正取 #${w.rank}` : `備取 #${w.rank}`}
+                                </span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-300 italic bg-yt-cardBg p-2.5 rounded-xl border border-yt-border my-1 break-words">
+                            "${escapeHtml(w.commentText)}"
+                        </p>
+                        <div class="flex justify-between items-center text-[10px] text-gray-500 mt-1.5">
+                            <span>${w.publishedAt}</span>
+                            <button onclick="redrawSingleInList('${w.id}')" class="text-red-400 hover:text-red-300 transition flex items-center gap-1 font-medium">
+                                <i class="fa-solid fa-rotate-right"></i> 重抽此名額
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function redrawSingleInList(winnerId) {
+            const idx = winnersList.findIndex(w => w.id === winnerId);
+            if (idx === -1) return;
+
+            const existingWinnerIds = new Set(winnersList.map(w => w.id));
+            const availablePool = filteredPool.filter(c => !existingWinnerIds.has(c.id));
+
+            if (availablePool.length === 0) {
+                alert('已無其他可替換之符合資格人選！');
+                return;
+            }
+
+            const newWinner = availablePool[Math.floor(Math.random() * availablePool.length)];
+            winnersList[idx] = {
+                ...newWinner,
+                type: winnersList[idx].type,
+                rank: winnersList[idx].rank
+            };
+
+            renderWinnersView();
+            playSound('win');
+        }
+
+        function showWinnerModal(winner, categoryText) {
+            document.getElementById('winnerModalName').innerText = winner.authorName;
+            document.getElementById('winnerModalComment').innerText = `"${winner.commentText}"`;
+            document.getElementById('winnerModalAvatar').src = winner.authorAvatar;
+            document.getElementById('winnerModalTime').innerText = winner.publishedAt;
+            document.getElementById('winnerModalCategory').innerText = categoryText || '中獎得主';
+
+            document.getElementById('winnerModal').classList.remove('hidden');
+            setTimeout(() => {
+                document.getElementById('winnerModal').firstElementChild.classList.remove('scale-95');
+                document.getElementById('winnerModal').firstElementChild.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeWinnerModal() {
+            document.getElementById('winnerModal').classList.add('hidden');
+        }
+
+        function redrawSingleWinner() {
+            closeWinnerModal();
+            executeDraw();
+        }
+
+        function openBlacklistModal() {
+            document.getElementById('blacklistTextArea').value = blacklist.join('\n');
+            document.getElementById('blacklistModal').classList.remove('hidden');
+        }
+
+        function closeBlacklistModal() {
+            document.getElementById('blacklistModal').classList.add('hidden');
+        }
+
+        function saveBlacklist() {
+            const lines = document.getElementById('blacklistTextArea').value.split('\n');
+            blacklist = lines.map(l => l.trim()).filter(l => l);
+            localStorage.setItem('yt_picker_blacklist', JSON.stringify(blacklist));
+            closeBlacklistModal();
+            applyFilters();
+            alert(`已更新黑名單，共 ${blacklist.length} 位被排除者！`);
+        }
+
+        function loadBlacklistFromStorage() {
+            const saved = localStorage.getItem('yt_picker_blacklist');
+            if (saved) {
+                try { blacklist = JSON.parse(saved); } catch(e){}
+            }
+        }
+
+        function saveHistoryRecord() {
+            if (winnersList.length === 0) return;
+            const history = getHistoryFromStorage();
+            const record = {
+                id: 'h_' + Date.now(),
+                timestamp: new Date().toLocaleString(),
+                totalCount: rawComments.length,
+                eligibleCount: filteredPool.length,
+                winners: winnersList
+            };
+            history.unshift(record);
+            localStorage.setItem('yt_picker_history', JSON.stringify(history.slice(0, 20)));
+        }
+
+        function getHistoryFromStorage() {
+            try {
+                return JSON.parse(localStorage.getItem('yt_picker_history')) || [];
+            } catch(e) { return []; }
+        }
+
+        function openHistoryModal() {
+            const history = getHistoryFromStorage();
+            const container = document.getElementById('historyListContainer');
+
+            if (history.length === 0) {
+                container.innerHTML = `<p class="text-xs text-gray-500 text-center py-6">暫無歷史紀錄</p>`;
+            } else {
+                container.innerHTML = history.map(h => `
+                    <div class="p-3 bg-yt-darkBg border border-yt-border rounded-xl text-xs space-y-1">
+                        <div class="flex justify-between text-gray-400">
+                            <span>時間：${h.timestamp}</span>
+                            <span class="text-amber-400">${h.winners.length} 人獲獎</span>
+                        </div>
+                        <p class="text-white font-semibold">得主：${h.winners.map(w => w.authorName).join(', ')}</p>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('historyModal').classList.remove('hidden');
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+
+        function clearHistory() {
+            localStorage.removeItem('yt_picker_history');
+            openHistoryModal();
+        }
+
+        async function openCertificateModal() {
+            if (winnersList.length === 0) {
+                alert('請先進行抽獎！');
+                return;
+            }
+
+            const nowStr = new Date().toLocaleString();
+            document.getElementById('certTime').innerText = nowStr;
+            document.getElementById('certStats').innerText = `${rawComments.length} / ${filteredPool.length}`;
+            document.getElementById('certWinnersCount').innerText = `${winnersList.length} 人`;
+
+            const rawString = `${nowStr}_${rawComments.length}_${filteredPool.length}_${winnersList.map(w=>w.id).join('-')}`;
+            const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawString));
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            document.getElementById('certHashInput').value = hashHex;
+            document.getElementById('certModal').classList.remove('hidden');
+        }
+
+        function closeCertModal() {
+            document.getElementById('certModal').classList.add('hidden');
+        }
+
+        function copyCertText() {
+            const time = document.getElementById('certTime').innerText;
+            const stats = document.getElementById('certStats').innerText;
+            const hash = document.getElementById('certHashInput').value;
+
+            let certText = `🛡️ YouTube 抽獎公信力證明憑證 🛡️\n`;
+            certText += `抽獎時間：${time}\n`;
+            certText += `留言總數/資格池：${stats}\n`;
+            certText += `中獎名單：\n`;
+            winnersList.forEach(w => {
+                certText += `- [${w.type === 'main' ? '正取' : '備取'}] ${w.authorName} (${w.commentText})\n`;
+            });
+            certText += `\nSHA-256 防竄改碼：${hash}`;
+
+            navigator.clipboard.writeText(certText).then(() => {
+                alert('憑證內容已成功複製！');
+            });
+        }
+
+        function exportWinnersCSV() {
+            if (winnersList.length === 0) {
+                alert('無得獎名單可匯出！');
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+            csvContent += "類別,順序,使用者名稱,留言內容,留言時間\n";
+
+            winnersList.forEach(w => {
+                const category = w.type === 'main' ? '正取' : '備取';
+                const cleanComment = `"${w.commentText.replace(/"/g, '""')}"`;
+                csvContent += `${category},${w.rank},"${w.authorName}",${cleanComment},"${w.publishedAt}"\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `YT_Winners_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function copyWinnersText() {
+            if (winnersList.length === 0) {
+                alert('尚無得獎名單！');
+                return;
+            }
+
+            let text = "🏆 YouTube 抽獎得獎結果 🏆\n\n";
+            const mainWinners = winnersList.filter(w => w.type === 'main');
+            const backupWinners = winnersList.filter(w => w.type === 'backup');
+
+            text += "【正取名單】\n";
+            mainWinners.forEach(w => {
+                text += `正取 #${w.rank}：${w.authorName} - "${w.commentText}"\n`;
+            });
+
+            if (backupWinners.length > 0) {
+                text += "\n【備取名單】\n";
+                backupWinners.forEach(w => {
+                    text += `備取 #${w.rank}：${w.authorName} - "${w.commentText}"\n`;
+                });
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                alert('得獎名單已成功複製至剪貼簿！');
+            });
+        }
+
+        function playSound(type) {
+            if (!document.getElementById('chkSound').checked) return;
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (type === 'tick') {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(450, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.04);
+                    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.04);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.04);
+                } else if (type === 'win') {
+                    const notes = [261.63, 329.63, 392.00, 523.25, 659.25];
+                    notes.forEach((freq, idx) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+                        gain.gain.setValueAtTime(0.25, ctx.currentTime + idx * 0.08);
+                        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + idx * 0.08 + 0.25);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(ctx.currentTime + idx * 0.08);
+                        osc.stop(ctx.currentTime + idx * 0.08 + 0.25);
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function triggerConfetti() {
+            const colors = ['#f43f5e', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa'];
+            for (let i = 0; i < 60; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                confetti.style.width = (Math.random() * 8 + 6) + 'px';
+                confetti.style.height = (Math.random() * 10 + 6) + 'px';
+                document.body.appendChild(confetti);
+
+                setTimeout(() => confetti.remove(), 4000);
+            }
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+    </script>
+</body>
+</html>
+抽獎結果名單
+已自動生成不可竄改之 SHA-256 公信力憑證
+複製文字 匯出 CSV 生成驗證憑證
+尚未抽出得主
+點擊右上角「開始抽獎」開啟活動！
+👑
+恭喜幸運得主！
+正取得獎者
+User Name
+2026-09-19
+"留言內容"
+重抽此名額 確定並檢視名單
+黑名單 / 禁抽帳號設定
+請輸入欲排除的使用者名稱（每行一個），符合名稱者將自動排除於抽獎池外：
+儲存黑名單
+抽獎歷史紀錄 (LocalStorage)
+
+清除所有歷史 關閉
+🛡️
+抽獎公信力驗證憑證
+證明本結果經隨機演算法產出，無人工竄改
+驗證時間： 2026-09-19
+留言總數 / 資格數： 1,200 / 1,050
+得獎人數： 3 人
+SHA-256 驗證壓印碼 (Proof Hash)：
+複製公信力憑證文字 關閉
+YouTube Data API 申請與使用完整教學
+為什麼需要 YouTube API Key？
+YouTube 官方對留言抓取有嚴格限制。透過您專屬的免費 API Key，本工具能直接串接官方 API，一鍵抓取破萬則留言且完全不會遺漏！
+4 個步驟輕鬆取得免費 API 金鑰：
+步驟 1
+前往 Google Cloud Console 並登入您的 Google 帳號。
+步驟 2
+點擊頂部導覽列建立一個新專案（例如命名為 YT-Picker）。
+步驟 3
+在上方搜尋列搜尋 "YouTube Data API v3"，點進去並點擊藍色的 「啟用」 按鈕。
+步驟 4
+切換到左側選單的 「憑證 (Credentials)」，點擊上方的 「建立憑證」 ➔ 選擇 「API 金鑰 (API Key)」，即可複製您的專屬金鑰！
+安全與額度提示：
+	•	您的 API Key 僅會儲存在您自己的瀏覽器 LocalStorage 中，絕不會上傳至任何第三方伺服器。
+	•	YouTube Data API v3 提供免費額度（每日約 10,000 單位），足以應付數十萬則留言抓取。
+我了解了，立即開始
